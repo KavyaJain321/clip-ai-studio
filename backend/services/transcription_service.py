@@ -27,7 +27,7 @@ def transcribe_audio_gemini(audio_path: str, api_key: str) -> Dict[str, Any]:
     logger.info(f"Uploading {audio_path} to Gemini...")
     audio_file = genai.upload_file(path=audio_path, mime_type="audio/wav")
     
-    model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+    model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
     
     # Prompt for structured output
     prompt = """
@@ -102,28 +102,13 @@ def transcribe_audio_whisper(audio_path: str, model_size: str = "base") -> Dict[
 
 def transcribe_audio(audio_path: str) -> Dict[str, Any]:
     """
-    Main entry point. Tries Gemini first, falls back to Whisper.
+    Main entry point. Uses Gemini only (Whisper disabled to save memory on Render free tier).
     """
     api_key = os.getenv("GEMINI_API_KEY")
     
-    # 1. Try Gemini
-    try:
-        logger.info("Attempting Gemini Transcription...")
-        return transcribe_audio_gemini(audio_path, api_key)
-    except Exception as e:
-        logger.error(f"Gemini Transcription failed: {e}")
-        
-        # 2. Try Whisper Fallback
-        if WHISPER_AVAILABLE:
-            logger.info("Falling back to Whisper (Local)...")
-            try:
-                return transcribe_audio_whisper(audio_path)
-            except Exception as we:
-                logger.error(f"Whisper Transcription failed: {we}")
-                raise RuntimeError(f"Both Gemini and Whisper failed. Gemini Error: {e}")
-        else:
-            logger.warning("Whisper not installed, skipping fallback.")
-            raise e
+    # Use Gemini only - Whisper fallback disabled to prevent memory overflow on Render
+    logger.info("Attempting Gemini Transcription...")
+    return transcribe_audio_gemini(audio_path, api_key)
 
 if __name__ == "__main__":
     # Test
