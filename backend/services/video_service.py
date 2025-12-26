@@ -85,8 +85,12 @@ def download_youtube_video(url: str, output_dir: str) -> dict:
 
     except yt_dlp.utils.DownloadError as e:
         error_msg = str(e)
-        if "Sign in to confirm your age" in error_msg:
-            raise Exception("Video is age-restricted. robust login needed.")
+        if "Sign in to confirm" in error_msg or "not a bot" in error_msg:
+            raise Exception(
+                "YouTube is blocking automated downloads due to bot detection. "
+                "Please download the video manually and upload it directly instead. "
+                "Direct video upload works perfectly!"
+            )
         elif "Video unavailable" in error_msg:
              raise Exception("Video is unavailable or invalid URL.")
         elif "Private video" in error_msg:
