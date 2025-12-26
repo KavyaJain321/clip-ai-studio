@@ -20,6 +20,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",
     "http://localhost:8000",
+    "https://clip-ai-studio-2.onrender.com",
     "*", # For ease of testing
 ]
 
