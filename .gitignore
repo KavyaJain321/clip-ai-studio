@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Node.js
+node_modules/
+.next/
+out/
+build/
+.DS_Store
+
+# User specific
+.vscode/
+.idea/
+
+# Backend storage (optional, but usually we don't commit large videos)
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+backend/storage/processed/*
+!backend/storage/processed/.gitkeep
+backend/storage/transcripts/*
+!backend/storage/transcripts/.gitkeep

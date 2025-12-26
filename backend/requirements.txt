@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-multipart
+yt-dlp
+google-generativeai
+ffmpeg-python
+python-dotenv
+requests
+openai-whisper
+torch
+setuptools-rust

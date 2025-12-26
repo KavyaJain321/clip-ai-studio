@@ -1,0 +1,122 @@
+[
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "7b47385e-726a-44e4-b95b-fcb4ed1c8c43.mp4",
+    "video_url": "/static/uploads/7b47385e-726a-44e4-b95b-fcb4ed1c8c43.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-27T00:07:01.606621"
+  },
+  {
+    "type": "youtube",
+    "source": "https://youtu.be/ooHyVrYY_2U?si=WeFYV-sW0q6aAcGp",
+    "filename": "ooHyVrYY_2U.mp4",
+    "video_url": "/static/uploads/ooHyVrYY_2U.mp4",
+    "transcript_summary": " Today,...",
+    "created_at": "2025-12-26T23:53:58.925754"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "b9256a44-61af-411e-8384-5b75056ca637.mp4",
+    "video_url": "/static/uploads/b9256a44-61af-411e-8384-5b75056ca637.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:50:06.875771"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "fd6906f8-0ea4-476d-81e0-9d51a24d67ea.mp4",
+    "video_url": "/static/uploads/fd6906f8-0ea4-476d-81e0-9d51a24d67ea.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:45:18.280988"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "08e8db17-f991-455e-956a-4266d489672e.mp4",
+    "video_url": "/static/uploads/08e8db17-f991-455e-956a-4266d489672e.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:42:45.818053"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "ce67fd3d-70ad-4820-85d1-5ec1e60233bf.mp4",
+    "video_url": "/static/uploads/ce67fd3d-70ad-4820-85d1-5ec1e60233bf.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:35:13.474277"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "dd8b1cf8-6bd1-4ed8-a32d-aa8e160259b2.mp4",
+    "video_url": "/static/uploads/dd8b1cf8-6bd1-4ed8-a32d-aa8e160259b2.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:30:12.620180"
+  },
+  {
+    "type": "youtube",
+    "source": "https://youtu.be/ooHyVrYY_2U?si=WeFYV-sW0q6aAcGp",
+    "filename": "ooHyVrYY_2U.mp4",
+    "video_url": "/static/uploads/ooHyVrYY_2U.mp4",
+    "transcript_summary": " Today,...",
+    "created_at": "2025-12-26T23:29:43.745690"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "e74c5cc2-91e5-4b51-99f2-0977349deed9.mp4",
+    "video_url": "/static/uploads/e74c5cc2-91e5-4b51-99f2-0977349deed9.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:15:51.983011"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "2b2681a6-2509-42da-ab86-9bc3d738fcf7.mp4",
+    "video_url": "/static/uploads/2b2681a6-2509-42da-ab86-9bc3d738fcf7.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:12:01.595682"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "5fd884fa-19cd-4fbf-8e94-4b46313608a9.mp4",
+    "video_url": "/static/uploads/5fd884fa-19cd-4fbf-8e94-4b46313608a9.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:09:02.667581"
+  },
+  {
+    "type": "youtube",
+    "source": "https://youtu.be/WJtnH0G8G1g?si=GAV0D9T6lryfmUXX",
+    "filename": "WJtnH0G8G1g.mp4",
+    "video_url": "/static/uploads/WJtnH0G8G1g.mp4",
+    "transcript_summary": " You're...",
+    "created_at": "2025-12-26T23:07:36.909008"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "5e27e3a1-3d37-4d54-8fcb-f111b4dfc004.mp4",
+    "video_url": "/static/uploads/5e27e3a1-3d37-4d54-8fcb-f111b4dfc004.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:05:38.614749"
+  },
+  {
+    "type": "youtube",
+    "source": "https://youtu.be/WJtnH0G8G1g?si=GAV0D9T6lryfmUXX",
+    "filename": "WJtnH0G8G1g.mp4",
+    "video_url": "/static/uploads/WJtnH0G8G1g.mp4",
+    "transcript_summary": "Transcription failed: Both Gemini and Whisper failed. Gemini Error: The read operation timed out...",
+    "created_at": "2025-12-26T23:04:50.054931"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "b51eb3bd-4a4a-4d2a-a0de-7243d81cea55.mp4",
+    "video_url": "/static/uploads/b51eb3bd-4a4a-4d2a-a0de-7243d81cea55.mp4",
+    "transcript_summary": " Are...",
+    "created_at": "2025-12-26T23:01:14.263843"
+  }
+]
