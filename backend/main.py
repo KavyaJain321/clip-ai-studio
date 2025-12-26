@@ -21,7 +21,7 @@ origins = [
     "http://localhost:3000",
     "http://localhost:8000",
     "https://clip-ai-studio-2.onrender.com",
-    "*", # For ease of testing
+    "https://clip-ai-studio-2.onrender.com/", # Trailing slash just in case
 ]
 
 app.add_middleware(
