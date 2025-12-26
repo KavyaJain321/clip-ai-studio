@@ -37,8 +37,8 @@ We will deploy the backend as a **Web Service** using Docker (to ensure FFmpeg i
     *   **Instance Type**: Free (or Starter).
 5.  **Environment Variables**:
     *   Scroll down to "Environment Variables".
-    *   Add Key: `GEMINI_API_KEY`
-    *   Add Value: Paste your actual Gemini API Key from your `.env` file.
+    *   Add Key: `ASSEMBLYAI_API_KEY`
+    *   Add Value: Paste your AssemblyAI API Key (get one free at https://www.assemblyai.com/dashboard/signup)
 6.  **Deploy**: Click **Create Web Service**.
 
 **Wait for it to finish.** Once live, copy the URL (e.g., `https://clip-ai-backend.onrender.com`).
