@@ -156,9 +156,6 @@ def upload_video_endpoint(file: UploadFile = File(...)):
         print(f"Error processing upload: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-from services.gemini_service import generate_summary, transcribe_audio as transcribe_clip_audio_fallback
-
-# ... imports ...
 
 @router.post("/extract-clip")
 def extract_clip_endpoint(request: ClipRequest):
