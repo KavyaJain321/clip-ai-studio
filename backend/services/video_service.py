@@ -41,8 +41,11 @@ def get_video_duration(video_path: str) -> float:
 def download_youtube_video(url: str, output_dir: str) -> dict:
     """
     Downloads a YouTube video using yt-dlp with robust error handling.
+    Supports manual cookie authentication via YOUTUBE_COOKIES env var (base64 encoded).
     Returns a dictionary containing the file path and metadata.
     """
+    import base64
+    import tempfile
     os.makedirs(output_dir, exist_ok=True)
     
     # Progress hook to log download status
@@ -64,6 +67,28 @@ def download_youtube_video(url: str, output_dir: str) -> dict:
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         'nocheckcertificate': True,
     }
+    
+    # Check for manual YouTube cookies (base64 encoded)
+    cookies_b64 = os.getenv("YOUTUBE_COOKIES")
+    cookies_file_path = None
+    
+    if cookies_b64:
+        try:
+            logger.info("Using manual YouTube cookies from environment")
+            # Decode base64 cookies
+            cookies_data = base64.b64decode(cookies_b64).decode('utf-8')
+            
+            # Save to temporary file
+            cookies_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+            cookies_file.write(cookies_data)
+            cookies_file.close()
+            cookies_file_path = cookies_file.name
+            
+            # Add to yt-dlp options
+            ydl_opts['cookiefile'] = cookies_file_path
+            logger.info(f"Cookies loaded from environment variable")
+        except Exception as e:
+            logger.warning(f"Failed to process YOUTUBE_COOKIES: {e}")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -85,11 +110,11 @@ def download_youtube_video(url: str, output_dir: str) -> dict:
 
     except yt_dlp.utils.DownloadError as e:
         error_msg = str(e)
-        if "Sign in to confirm" in error_msg or "not a bot" in error_msg:
+        if "Sign in to confirm" in error_msg or "not a bot" in error_msg or "could not find chrome cookies" in error_msg:
             raise Exception(
-                "YouTube is blocking automated downloads due to bot detection. "
-                "Please download the video manually and upload it directly instead. "
-                "Direct video upload works perfectly!"
+                "YouTube is blocking automated downloads. "
+                "Add YOUTUBE_COOKIES environment variable with base64-encoded browser cookies, "
+                "or download the video manually and upload it directly."
             )
         elif "Video unavailable" in error_msg:
              raise Exception("Video is unavailable or invalid URL.")
@@ -99,6 +124,14 @@ def download_youtube_video(url: str, output_dir: str) -> dict:
              raise Exception(f"YouTube Download Error: {error_msg}")
     except Exception as e:
         raise Exception(f"Unexpected Error: {str(e)}")
+    finally:
+        # Clean up temporary cookie file
+        if cookies_file_path and os.path.exists(cookies_file_path):
+            try:
+                os.unlink(cookies_file_path)
+                logger.info("Cleaned up temporary cookie file")
+            except Exception as e:
+                logger.warning(f"Failed to delete temp cookie file: {e}")
 
 def extract_audio(video_path: str, output_path: str) -> str:
     """
