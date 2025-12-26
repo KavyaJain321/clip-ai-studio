@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def transcribe_audio_gemini(audio_path: str, api_key: str) -> Dict[str, Any]:
     """
-    Transcribes audio using Google Gemini 1.5 Flash.
+    Transcribes audio using Google Gemini 1.5 Pro.
     Returns structured JSON with text and word-level timestamps.
     """
     if not api_key:
@@ -25,9 +25,16 @@ def transcribe_audio_gemini(audio_path: str, api_key: str) -> Dict[str, Any]:
     genai.configure(api_key=api_key)
     
     logger.info(f"Uploading {audio_path} to Gemini...")
-    audio_file = genai.upload_file(path=audio_path, mime_type="audio/wav")
+    try:
+        audio_file = genai.upload_file(path=audio_path, mime_type="audio/wav")
+    except Exception as upload_error:
+        raise RuntimeError(f"Failed to upload audio to Gemini: {upload_error}")
     
-    model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
+    # Try gemini-1.5-pro (more widely available than flash)
+    try:
+        model = genai.GenerativeModel(model_name="gemini-1.5-pro")
+    except Exception as model_error:
+        raise RuntimeError(f"Failed to initialize Gemini model. Your API key may not have access to Gemini 1.5 models. Error: {model_error}")
     
     # Prompt for structured output
     prompt = """
