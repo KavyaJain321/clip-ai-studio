@@ -59,7 +59,8 @@ def download_youtube_video(url: str, output_dir: str) -> dict:
         'quiet': True,
         'no_warnings': True,
         'progress_hooks': [progress_hook],
-        # Bypass YouTube bot detection
+        # Bypass YouTube bot detection using browser cookies
+        'cookiesfrombrowser': ('chrome',),  # Try Chrome first, falls back to other browsers
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         'nocheckcertificate': True,
