@@ -15,7 +15,7 @@ First, we need to upload your code to a repository.
 2.  **Create a Repo**: Go to [GitHub.com/new](https://github.com/new) and create a repository (e.g., `clip-ai-studio`).
 3.  **Push Code**:
     ```bash
-    git remote add origin https://github.com/YOUR_USERNAME/clip-ai-studio.git
+    git remote add origin https://github.com/KavyaJain321/clip-ai-studio.git
     git branch -M main
     git push -u origin main
     ```
