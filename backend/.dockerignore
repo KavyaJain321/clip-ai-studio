@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Local development
+.env
+*.db
+*.sqlite
+
+# Uploads and processed files (ephemeral on Render)
+uploads/*
+processed/*
+storage/*
+
+# Testing
+test_*.py
+*.test.py
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
