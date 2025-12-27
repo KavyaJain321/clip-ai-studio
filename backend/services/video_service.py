@@ -56,13 +56,18 @@ def download_youtube_video(url: str, output_dir: str) -> dict:
             print("Download complete, processing...")
 
     ydl_opts = {
-        'format': 'best[ext=mp4]/best',  # More flexible format selection
+        # Let yt-dlp choose the best available format automatically
         'outtmpl': os.path.join(output_dir, '%(id)s.%(ext)s'),
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
         'progress_hooks': [progress_hook],
-        # Attempt to bypass YouTube bot detection
+        # Convert to MP4 if needed
+        'postprocessors': [{
+            'key': 'FFmpegVideoConvertor',
+            'preferedformat': 'mp4',
+        }],
+        # Bypass YouTube bot detection
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         'nocheckcertificate': True,
