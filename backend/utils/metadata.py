@@ -63,3 +63,10 @@ def delete_video_entry(filename: str):
     if os.path.exists(transcript_path):
         os.remove(transcript_path)
 
+def get_video_metadata(filename: str) -> Dict[str, Any]:
+    """Retrieves metadata for a specific video by filename."""
+    entries = load_metadata()
+    for entry in entries:
+        if entry.get("filename") == filename:
+            return entry
+    return None

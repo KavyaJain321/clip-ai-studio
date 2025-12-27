@@ -259,3 +259,170 @@ def extract_clip(video_path: str, keyword_time: float, output_path: str) -> dict
 
 # Backwards compatibility
 cut_video_clip = extract_clip
+
+# ============================================================================
+# YOUTUBE STREAMING FUNCTIONS (No Download Required)
+# ============================================================================
+
+def get_youtube_stream_urls(url: str) -> dict:
+    """
+    Extracts direct stream URLs from YouTube without downloading the video.
+    
+    Args:
+        url: YouTube video URL
+    
+    Returns:
+        {
+            "video_url": "direct video stream URL",
+            "audio_url": "direct audio stream URL",
+            "title": "video title",
+            "duration": 123.45,
+            "thumbnail": "thumbnail URL"
+        }
+    """
+    import base64
+    import tempfile
+    
+    logger.info(f"Extracting stream URLs from: {url}")
+    
+    ydl_opts = {
+        'format': 'best',
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,  # Get full info
+        'skip_download': True,  # Don't download, just extract info
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'extractor_args': {'youtube': {'player_client': ['android']}},
+    }
+    
+    # Add cookies if available
+    cookies_b64 = os.getenv("YOUTUBE_COOKIES")
+    cookies_file_path = None
+    
+    if cookies_b64:
+        try:
+            cookies_data = base64.b64decode(cookies_b64).decode('utf-8')
+            cookies_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+            cookies_file.write(cookies_data)
+            cookies_file.close()
+            cookies_file_path = cookies_file.name
+            ydl_opts['cookiefile'] = cookies_file_path
+        except Exception as e:
+            logger.warning(f"Failed to process cookies: {e}")
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            # Get the best video and audio URLs
+            video_url = info.get('url')  # Direct stream URL
+            
+            return {
+                "video_url": video_url,
+                "audio_url": video_url,  # Same URL works for both
+                "title": info.get('title', 'Unknown'),
+                "duration": info.get('duration', 0),
+                "thumbnail": info.get('thumbnail', ''),
+                "video_id": info.get('id', '')
+            }
+    finally:
+        if cookies_file_path and os.path.exists(cookies_file_path):
+            try:
+                os.unlink(cookies_file_path)
+            except:
+                pass
+
+def extract_clip_from_stream(
+    stream_url: str,
+    start_time: float,
+    output_path: str,
+    duration: float = 14.0
+) -> dict:
+    """
+    Extracts a clip directly from a YouTube stream URL using FFmpeg.
+    Downloads ONLY the requested segment (e.g., 14 seconds).
+    
+    Args:
+        stream_url: Direct YouTube stream URL
+        start_time: Start time in seconds
+        output_path: Path to save the clip
+        duration: Clip duration in seconds (default: 14)
+    
+    Returns:
+        {
+            "video_clip": output_path,
+            "audio_clip": audio_path,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": duration
+        }
+    """
+    check_ffmpeg()
+    
+    logger.info(f"Extracting {duration}s clip from stream starting at {start_time}s")
+    
+    # Output paths
+    base, ext = os.path.splitext(output_path)
+    audio_clip_path = f"{base}.wav"
+    
+    try:
+        # Extract video clip from stream
+        cmd_video = [
+            "ffmpeg",
+            "-ss", str(start_time),  # Seek to start time
+            "-i", stream_url,         # Input from stream URL
+            "-t", str(duration),      # Duration to extract
+            "-c:v", "copy",           # Copy video codec (fast, no re-encode)
+            "-c:a", "aac",            # Re-encode audio to AAC
+            "-y",                     # Overwrite output
+            output_path
+        ]
+        
+        logger.info(f"Extracting video clip...")
+        subprocess.run(
+            cmd_video,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
+        
+        # Extract audio clip for transcription
+        cmd_audio = [
+            "ffmpeg",
+            "-ss", str(start_time),
+            "-i", stream_url,
+            "-t", str(duration),
+            "-vn",                    # No video
+            "-acodec", "pcm_s16le",   # WAV format
+            "-ar", "16000",           # 16kHz sample rate
+            "-ac", "1",               # Mono
+            "-y",
+            audio_clip_path
+        ]
+        
+        logger.info(f"Extracting audio clip...")
+        subprocess.run(
+            cmd_audio,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
+        
+        end_time = start_time + duration
+        
+        logger.info(f"Clip extracted successfully: {output_path}")
+        
+        return {
+            "video_clip": output_path,
+            "audio_clip": audio_clip_path,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": duration
+        }
+        
+    except subprocess.CalledProcessError as e:
+        logger.error(f"FFmpeg stream extraction failed: {e.stderr}")
+        raise RuntimeError(f"Stream clip extraction failed: {e.stderr}")
+    except Exception as e:
+        logger.error(f"Stream extraction error: {e}")
+        raise RuntimeError(f"Stream extraction error: {str(e)}")

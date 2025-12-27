@@ -6,8 +6,9 @@ import json
 import uuid
 
 # Internal modules
-from services.video_service import download_youtube_video, extract_audio, extract_clip
+from services.video_service import extract_audio, extract_clip, get_youtube_stream_urls, extract_clip_from_stream
 from services.transcription_service import transcribe_audio
+from services.youtube_transcript_service import get_youtube_captions_from_url, extract_video_id
 from services.gemini_service import generate_summary
 from utils.validators import validate_video_file, validate_youtube_url
 from utils.storage import save_upload_file, get_file_path, UPLOADS_DIR, PROCESSED_DIR
@@ -40,64 +41,76 @@ class ClipRequest(BaseModel):
 @router.post("/process-url")
 def process_url_endpoint(request: VideoRequest):
     """
-    Process a YouTube URL: download, extract audio, transcribe.
+    Process a YouTube URL using streaming architecture (NO DOWNLOAD).
+    Uses YouTube auto-captions for instant transcription.
     """
     try:
         # 1. Validation
         validate_youtube_url(request.url)
         
-        # 2. Download
-        download_result = download_youtube_video(request.url, UPLOADS_DIR)
-        video_path = download_result["file_path"]
-        filename = os.path.basename(video_path)
+        # 2. Extract video ID
+        video_id = extract_video_id(request.url)
+        filename = f"{video_id}.mp4"  # Virtual filename for metadata
         
-        # Optional: verify video file exists
-        if not os.path.exists(video_path):
-             raise Exception("Download reported success but file missing.")
-        
-        # 3. Audio Extraction
-        audio_filename = f"{os.path.splitext(filename)[0]}.wav"
-        audio_path = os.path.join(UPLOADS_DIR, audio_filename)
-        extract_audio(video_path, audio_path)
-        
-        # 4. Transcription
+        # 3. Try YouTube auto-captions first (INSTANT, FREE)
+        transcript_data = None
         try:
-            transcript_data = transcribe_audio(audio_path)
-            # Normalize words to match frontend expectation (text, start, end)
-            raw_words = transcript_data.get("words", [])
+            print(f"Attempting to fetch YouTube auto-captions for {video_id}...")
+            captions = get_youtube_captions_from_url(request.url)
+            
+            # Format to match expected structure
             transcript = [
-                {"text": w.get("word", ""), "start": w.get("start", 0), "end": w.get("end", 0), "confidence": w.get("confidence", 1.0)} 
-                for w in raw_words
+                {
+                    "text": w["word"],
+                    "start": w["start"],
+                    "end": w["end"],
+                    "confidence": 1.0  # YouTube captions are reliable
+                }
+                for w in captions["words"]
             ]
-            # If "words" is empty, we might use "transcript" but UI expects array with start/end
-            if not transcript:
-                 # Fallback if structure is missing
-                 transcript = [{"text": transcript_data.get("transcript", ""), "start": 0, "end": 0}]
-        except Exception as e:
-            print(f"Transcription failed (API Key issue?): {e}")
-            transcript = [{"text": f"Transcription failed: {str(e)}", "start": 0, "end": 0}]
+            
+            print(f"✅ Successfully fetched {len(transcript)} words from YouTube captions")
+            transcript_data = transcript
+            
+        except Exception as caption_error:
+            print(f"⚠️ YouTube captions not available: {caption_error}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"This video doesn't have auto-captions. Please use a video with captions or upload the video file directly."
+            )
         
-        # Save to History
+        # 4. Get stream URLs for later clip extraction (NO DOWNLOAD)
+        stream_info = get_youtube_stream_urls(request.url)
+        
+        # 5. Save metadata with stream URL (NO VIDEO FILE SAVED)
         from utils.metadata import save_transcript
-        save_transcript(filename, transcript)
-
+        save_transcript(filename, transcript_data)
+        
         save_metadata({
             "type": "youtube",
             "source": request.url,
             "filename": filename,
-            "video_url": f"/static/uploads/{filename}",
-            "transcript_summary": transcript[0]["text"][:100] + "..." if transcript else "No transcript"
+            "video_id": video_id,
+            "stream_url": stream_info["video_url"],  # Save for clip extraction
+            "title": stream_info["title"],
+            "duration": stream_info["duration"],
+            "video_url": f"/youtube/{video_id}",  # Virtual URL
+            "transcript_summary": transcript_data[0]["text"][:100] + "..." if transcript_data else "No transcript"
         })
 
         return {
             "video_filename": filename,
-            "video_url": f"/static/uploads/{filename}",
-            "transcript": transcript
+            "video_url": f"/youtube/{video_id}",  # Virtual URL (no actual file)
+            "transcript": transcript_data,
+            "title": stream_info.get("title", "Unknown"),
+            "duration": stream_info.get("duration", 0)
         }
     except HTTPException as he:
         raise he
     except Exception as e:
         print(f"Error processing URL: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload")
@@ -161,46 +174,51 @@ def upload_video_endpoint(file: UploadFile = File(...)):
 def extract_clip_endpoint(request: ClipRequest):
     """
     Extract a 14s clip around the timestamp and generate a summary.
+    Supports both uploaded videos and YouTube streams.
     """
     print(f"Received clip request: {request.dict()}")
     try:
-        # 1. Locate Video
-        safe_filename = os.path.basename(request.video_filename)
-        video_path = os.path.join(UPLOADS_DIR, safe_filename)
+        # 1. Check if this is a YouTube video (has stream_url in metadata)
+        from utils.metadata import get_video_metadata
+        metadata = get_video_metadata(request.video_filename)
         
-        print(f"Looking for file at: {video_path}")
-        if not os.path.exists(video_path):
-             print("File not found.")
-             raise HTTPException(status_code=404, detail=f"Video file not found: {safe_filename}")
-        
-        # 2. Extract Clip
         clip_filename = f"clip_{uuid.uuid4()}.mp4"
         clip_path = os.path.join(PROCESSED_DIR, clip_filename)
         
-        # Returns {"video_clip": ..., "audio_clip": ..., ...}
-        print(f"Extracting clip to: {clip_path}")
-        extraction_result = extract_clip(video_path, request.timestamp, clip_path)
-        print("Extraction complete.")
+        # 2. Extract Clip (either from stream or local file)
+        if metadata and metadata.get("stream_url"):
+            # YouTube video - extract from stream
+            print(f"Extracting clip from YouTube stream...")
+            stream_url = metadata["stream_url"]
+            extraction_result = extract_clip_from_stream(
+                stream_url,
+                request.timestamp,
+                clip_path,
+                duration=14.0
+            )
+            print("Stream extraction complete.")
+        else:
+            # Uploaded video - extract from local file
+            safe_filename = os.path.basename(request.video_filename)
+            video_path = os.path.join(UPLOADS_DIR, safe_filename)
+            
+            print(f"Looking for file at: {video_path}")
+            if not os.path.exists(video_path):
+                 print("File not found.")
+                 raise HTTPException(status_code=404, detail=f"Video file not found: {safe_filename}")
+            
+            print(f"Extracting clip from local file...")
+            extraction_result = extract_clip(video_path, request.timestamp, clip_path)
+            print("Extraction complete.")
         
         # 3. Generate Summary
-        # We need the transcript of the CLIP to generate a good summary.
-        # Ideally we slice the main transcript, but for robustness we can just 
-        # transcribe the short clip audio quickly if available.
-        
         summary_data = {}
         try:
              # Fast transcription of the 14s clip
              audio_clip_path = extraction_result["audio_clip"]
              print(f"Transcribing clip audio for summary: {audio_clip_path}")
              
-             # Using the robust transcription service would be better if imported, 
-             # but gemini_service has a simple one too. 
-             # Let's use `transcribe_audio` from transcription_service if possible, 
-             # but to avoid circular deps or complexity, use the one we just ensured in gemini_service?
-             # Actually `transcribe_audio` in gemini_service is now Legacy.
-             # Let's use the `transcription_service.transcribe_audio` we already imported!
-             
-             clip_transcript_data = transcribe_audio(audio_clip_path) # Imported from transcription_service
+             clip_transcript_data = transcribe_audio(audio_clip_path)
              clip_text = clip_transcript_data.get("transcript", "")
              
              if not clip_text:
@@ -211,7 +229,7 @@ def extract_clip_endpoint(request: ClipRequest):
              summary_data = generate_summary(
                  clip_transcript=clip_text, 
                  keyword=request.keyword,
-                 context_before="(Context not loaded from DB)", # TODO: Fetch from metadata
+                 context_before="(Context not loaded from DB)",
                  context_after="" 
              )
         except Exception as e:
