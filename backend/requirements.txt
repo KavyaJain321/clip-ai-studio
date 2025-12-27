@@ -3,7 +3,7 @@ uvicorn
 python-multipart
 yt-dlp
 assemblyai
-youtube-transcript-api
+youtube-transcript-api==0.6.2
 ffmpeg-python
 python-dotenv
 requests
