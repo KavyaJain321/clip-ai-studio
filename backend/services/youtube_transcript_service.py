@@ -1,5 +1,8 @@
 import logging
 import re
+import os
+import base64
+import tempfile
 from typing import Dict, Any, List, Optional
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
@@ -14,11 +17,6 @@ def extract_video_id(url: str) -> str:
     if not url:
         raise ValueError("URL cannot be empty")
         
-    # Standard format: https://www.youtube.com/watch?v=VIDEO_ID
-    # Short format: https://youtu.be/VIDEO_ID
-    # Embed format: https://www.youtube.com/embed/VIDEO_ID
-    # Mobile format: https://m.youtube.com/watch?v=VIDEO_ID
-    
     patterns = [
         r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
         r'(?:v=|\/)([0-9A-Za-z_-]{11})',
@@ -29,25 +27,54 @@ def extract_video_id(url: str) -> str:
         if match:
             return match.group(1)
             
-    # Fallback: check if the input itself is a video ID (11 chars)
     if re.match(r'^[0-9A-Za-z_-]{11}$', url):
         return url
         
     raise ValueError(f"Could not extract video ID from URL: {url}")
 
+def get_cookies_file_path() -> Optional[str]:
+    """
+    Decodes YOUTUBE_COOKIES env var and writes to a temp file.
+    Returns the path to the temp file or None.
+    """
+    cookies_b64 = os.getenv("YOUTUBE_COOKIES")
+    if not cookies_b64:
+        return None
+        
+    try:
+        logger.info("Found YOUTUBE_COOKIES, creating temp cookie file...")
+        # Decode base64 cookies
+        cookies_data = base64.b64decode(cookies_b64).decode('utf-8')
+        
+        # Create temp file
+        tf = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+        tf.write(cookies_data)
+        tf.close()
+        return tf.name
+    except Exception as e:
+        logger.error(f"Failed to process YOUTUBE_COOKIES: {e}")
+        return None
+
 def get_youtube_captions(video_id: str, languages: List[str] = ['en']) -> Dict[str, Any]:
     """
-    Fetches auto-generated or manual captions from YouTube using a robust approach.
-    Handles 'list_transcripts' missing attribute error by falling back to 'get_transcript'.
+    Fetches auto-generated or manual captions from YouTube.
+    Supports YOUTUBE_COOKIES to bypass 429/bot detection.
     """
+    cookies_file = None
     try:
         logger.info(f"Fetching YouTube captions for video: {video_id}")
         
+        # 1. Setup Cookies
+        cookies_file = get_cookies_file_path()
+        if cookies_file:
+            logger.info(f"Using cookies from: {cookies_file}")
+
         transcript_obj = None
         
-        # Method 1: Try list_transcripts (Newer API, more features)
+        # 2. Fetch Transcript
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # list_transcripts supports cookies
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookies_file)
             
             # Try to find transcript in requested languages
             for lang in languages:
@@ -69,20 +96,15 @@ def get_youtube_captions(video_id: str, languages: List[str] = ['en']) -> Dict[s
             if transcript_obj:
                 caption_data = transcript_obj.fetch()
             else:
-                # Fallback to direct get_transcript if list_transcripts didn't yield result
-                logger.info("Falling back to get_transcript method...")
-                caption_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+                logger.info("No transcript found in list. Trying get_transcript fallback.")
+                caption_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages, cookies=cookies_file)
 
         except AttributeError:
-            # Fallback for older versions or if list_transcripts is missing
-            logger.warning("YouTubeTranscriptApi.list_transcripts not available. Using get_transcript fallback.")
-            caption_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
-        except Exception as e:
-            # Try one last resort: get_transcript direct call
-            logger.warning(f"Error in list_transcripts flow: {e}. Trying direct get_transcript.")
-            caption_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+             # Fallback if list_transcripts is missing
+             logger.warning("list_transcripts missing. Using get_transcript.")
+             caption_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages, cookies=cookies_file)
             
-        # Format into our standard structure
+        # 3. Process Data
         full_text = " ".join([entry['text'] for entry in caption_data])
         
         words = []
@@ -91,46 +113,44 @@ def get_youtube_captions(video_id: str, languages: List[str] = ['en']) -> Dict[s
             start_time = entry['start']
             duration = entry['duration']
             
-            # Clean up text (unescape HTML entities if needed, though lib usually handles it)
             phrase = phrase.replace('\n', ' ')
-            
-            # Split phrase into words
             phrase_words = phrase.split()
             if not phrase_words:
                 continue
             
-            # Estimate time per word
             time_per_word = duration / len(phrase_words)
             
-            # Create word entries with estimated timestamps
             for i, word in enumerate(phrase_words):
-                word_start = start_time + (i * time_per_word)
-                word_end = word_start + time_per_word
-                
                 words.append({
                     "word": word,
-                    "start": round(word_start, 2),
-                    "end": round(word_end, 2)
+                    "start": round(start_time + (i * time_per_word), 2),
+                    "end": round(start_time + (i * time_per_word) + time_per_word, 2)
                 })
         
-        logger.info(f"Successfully extracted {len(words)} words from captions")
+        logger.info(f"Successfully extracted {len(words)} words")
         
         return {
             "transcript": full_text,
             "words": words
         }
         
-    except TranscriptsDisabled:
-        error_msg = f"Transcripts are disabled for video: {video_id}"
-        logger.error(error_msg)
-        raise Exception(error_msg)
-    except NoTranscriptFound:
-        error_msg = f"No transcript found for video {video_id} in languages: {languages}"
-        logger.error(error_msg)
-        raise Exception(error_msg)
     except Exception as e:
         logger.error(f"Error fetching YouTube captions: {e}")
+        error_str = str(e)
+        if "Too Many Requests" in error_str or "429" in error_str:
+            raise Exception("YouTube blocked request (429). Please update YOUTUBE_COOKIES.")
+        elif "Sign in" in error_str:
+             raise Exception("YouTube requires sign-in. Please update YOUTUBE_COOKIES.")
+        
         raise Exception(f"Failed to fetch captions: {str(e)}")
+        
+    finally:
+        # Cleanup temp cookie file
+        if cookies_file and os.path.exists(cookies_file):
+            try:
+                os.unlink(cookies_file)
+            except:
+                pass
 
 def get_youtube_captions_from_url(url: str, languages: List[str] = ['en']) -> Dict[str, Any]:
     """
