@@ -38,11 +38,13 @@ class ClipRequest(BaseModel):
 
 # --- Endpoints ---
 
+from services.robust_youtube_service import RobustYouTubeService
+
 @router.post("/process-url")
-def process_url_endpoint(request: VideoRequest):
+async def process_url_endpoint(request: VideoRequest):
     """
     Process a YouTube URL using streaming architecture (NO DOWNLOAD).
-    Uses YouTube auto-captions for instant transcription.
+    Uses robust multi-strategy fetching to bypass rate limits.
     """
     try:
         # 1. Validation
@@ -52,31 +54,37 @@ def process_url_endpoint(request: VideoRequest):
         video_id = extract_video_id(request.url)
         filename = f"{video_id}.mp4"  # Virtual filename for metadata
         
-        # 3. Try YouTube auto-captions first (INSTANT, FREE)
+        # 3. Try Robust Transcript Fetching (Invidious -> API -> Audio Fallback)
         transcript_data = None
+        method_used = "unknown"
+        
         try:
-            print(f"Attempting to fetch YouTube auto-captions for {video_id}...")
-            captions = get_youtube_captions_from_url(request.url)
+            print(f"Attempting to fetch transcript for {video_id} using Robust Service...")
+            youtube_service = RobustYouTubeService()
+            result = youtube_service.get_transcript(video_id, video_url=request.url)
             
-            # Format to match expected structure
+            # Result format: { "transcript": "...", "words": [...], "method": "..." }
+            
+            # Format to match expected structure for frontend
             transcript = [
                 {
-                    "text": w["word"],
+                    "text": w["text"], # Robust service standardizes this to 'text'
                     "start": w["start"],
                     "end": w["end"],
-                    "confidence": 1.0  # YouTube captions are reliable
+                    "confidence": 1.0
                 }
-                for w in captions["words"]
+                for w in result["words"]
             ]
             
-            print(f"✅ Successfully fetched {len(transcript)} words from YouTube captions")
+            method_used = result.get("method", "unknown")
+            print(f"✅ Successfully fetched transcript using {method_used.upper()}")
             transcript_data = transcript
             
-        except Exception as caption_error:
-            print(f"⚠️ YouTube captions not available: {caption_error}")
+        except Exception as transcript_error:
+            print(f"⚠️ Robust transcript fetch failed: {transcript_error}")
             raise HTTPException(
                 status_code=400,
-                detail=f"This video doesn't have auto-captions. Please use a video with captions or upload the video file directly."
+                detail=f"Could not fetch transcript. Error: {str(transcript_error)}"
             )
         
         # 4. Get stream URLs for later clip extraction (NO DOWNLOAD)
