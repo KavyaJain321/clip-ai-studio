@@ -10,78 +10,89 @@ logger = logging.getLogger(__name__)
 def extract_video_id(url: str) -> str:
     """
     Extracts YouTube video ID from various URL formats.
-    Supports:
-    - https://www.youtube.com/watch?v=VIDEO_ID
-    - https://youtu.be/VIDEO_ID
-    - https://www.youtube.com/embed/VIDEO_ID
     """
+    if not url:
+        raise ValueError("URL cannot be empty")
+        
+    # Standard format: https://www.youtube.com/watch?v=VIDEO_ID
+    # Short format: https://youtu.be/VIDEO_ID
+    # Embed format: https://www.youtube.com/embed/VIDEO_ID
+    # Mobile format: https://m.youtube.com/watch?v=VIDEO_ID
+    
     patterns = [
-        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
-        r'youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})',
+        r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
+        r'(?:v=|\/)([0-9A-Za-z_-]{11})',
     ]
     
     for pattern in patterns:
         match = re.search(pattern, url)
         if match:
             return match.group(1)
-    
+            
+    # Fallback: check if the input itself is a video ID (11 chars)
+    if re.match(r'^[0-9A-Za-z_-]{11}$', url):
+        return url
+        
     raise ValueError(f"Could not extract video ID from URL: {url}")
 
 def get_youtube_captions(video_id: str, languages: List[str] = ['en']) -> Dict[str, Any]:
     """
-    Fetches auto-generated or manual captions from YouTube.
-    
-    Args:
-        video_id: YouTube video ID
-        languages: List of language codes to try (default: ['en'])
-    
-    Returns:
-        {
-            "transcript": "full text",
-            "words": [{"text": "word", "start": 0.0, "end": 1.0}]
-        }
-    
-    Raises:
-        TranscriptsDisabled: If video has no captions
-        NoTranscriptFound: If requested language not available
+    Fetches auto-generated or manual captions from YouTube using a robust approach.
+    Handles 'list_transcripts' missing attribute error by falling back to 'get_transcript'.
     """
     try:
         logger.info(f"Fetching YouTube captions for video: {video_id}")
         
-        # Get transcript list
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        transcript_obj = None
         
-        # Try to find transcript in requested languages
-        transcript = None
-        for lang in languages:
-            try:
-                transcript = transcript_list.find_transcript([lang])
-                logger.info(f"Found {lang} transcript for {video_id}")
-                break
-            except NoTranscriptFound:
-                continue
-        
-        # If no manual transcript, try auto-generated
-        if not transcript:
-            try:
-                transcript = transcript_list.find_generated_transcript(languages)
-                logger.info(f"Using auto-generated transcript for {video_id}")
-            except NoTranscriptFound:
-                raise NoTranscriptFound(f"No transcript found for languages: {languages}")
-        
-        # Fetch the actual transcript data
-        caption_data = transcript.fetch()
-        
+        # Method 1: Try list_transcripts (Newer API, more features)
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Try to find transcript in requested languages
+            for lang in languages:
+                try:
+                    transcript_obj = transcript_list.find_transcript([lang])
+                    logger.info(f"Found {lang} transcript for {video_id}")
+                    break
+                except NoTranscriptFound:
+                    continue
+            
+            # If no manual transcript, try auto-generated
+            if not transcript_obj:
+                try:
+                    transcript_obj = transcript_list.find_generated_transcript(languages)
+                    logger.info(f"Using auto-generated transcript for {video_id}")
+                except NoTranscriptFound:
+                    logger.warning(f"No auto-generated transcript found for languages: {languages}")
+
+            if transcript_obj:
+                caption_data = transcript_obj.fetch()
+            else:
+                # Fallback to direct get_transcript if list_transcripts didn't yield result
+                logger.info("Falling back to get_transcript method...")
+                caption_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+
+        except AttributeError:
+            # Fallback for older versions or if list_transcripts is missing
+            logger.warning("YouTubeTranscriptApi.list_transcripts not available. Using get_transcript fallback.")
+            caption_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+        except Exception as e:
+            # Try one last resort: get_transcript direct call
+            logger.warning(f"Error in list_transcripts flow: {e}. Trying direct get_transcript.")
+            caption_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+            
         # Format into our standard structure
         full_text = " ".join([entry['text'] for entry in caption_data])
         
         words = []
         for entry in caption_data:
-            # YouTube captions are phrase-based, not word-based
-            # Split each phrase into words and estimate timestamps
             phrase = entry['text']
             start_time = entry['start']
             duration = entry['duration']
+            
+            # Clean up text (unescape HTML entities if needed, though lib usually handles it)
+            phrase = phrase.replace('\n', ' ')
             
             # Split phrase into words
             phrase_words = phrase.split()
@@ -110,25 +121,20 @@ def get_youtube_captions(video_id: str, languages: List[str] = ['en']) -> Dict[s
         }
         
     except TranscriptsDisabled:
-        logger.error(f"Transcripts are disabled for video: {video_id}")
-        raise
-    except NoTranscriptFound as e:
-        logger.error(f"No transcript found for video {video_id}: {e}")
-        raise
+        error_msg = f"Transcripts are disabled for video: {video_id}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+    except NoTranscriptFound:
+        error_msg = f"No transcript found for video {video_id} in languages: {languages}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
     except Exception as e:
         logger.error(f"Error fetching YouTube captions: {e}")
-        raise
+        raise Exception(f"Failed to fetch captions: {str(e)}")
 
 def get_youtube_captions_from_url(url: str, languages: List[str] = ['en']) -> Dict[str, Any]:
     """
     Convenience function to get captions directly from YouTube URL.
-    
-    Args:
-        url: YouTube video URL
-        languages: List of language codes to try
-    
-    Returns:
-        Caption data with transcript and word-level timestamps
     """
     video_id = extract_video_id(url)
     return get_youtube_captions(video_id, languages)

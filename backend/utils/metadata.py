@@ -26,8 +26,39 @@ def save_metadata(entry: Dict[str, Any]):
     with open(METADATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "storage", "uploads")
+
 def get_all_videos() -> List[Dict[str, Any]]:
-    return load_metadata()
+    """
+    Returns all video metadata, filtering out files that don't exist locally
+    (unless they are YouTube videos which don't have local files).
+    """
+    raw_data = load_metadata()
+    valid_data = []
+    
+    for entry in raw_data:
+        # Determine if it's a YouTube video
+        is_youtube = entry.get("type") == "youtube" or entry.get("video_url", "").startswith("/youtube/")
+        
+        if is_youtube:
+            # YouTube videos are valid as long as they have a video_id
+            if entry.get("video_id"):
+                valid_data.append(entry)
+        else:
+            # Local uploads must have a file that exists
+            filename = entry.get("filename")
+            if not filename:
+                continue
+                
+            file_path = os.path.join(UPLOADS_DIR, filename)
+            if os.path.exists(file_path):
+                valid_data.append(entry)
+            else:
+                # Optional: We could remove it from metadata file permanently here
+                # but for safety just filtering for now
+                pass
+                
+    return valid_data
 
 def save_transcript(filename: str, transcript: List[Dict]):
     """Saves the full transcript to a separate JSON file."""
