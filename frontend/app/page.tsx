@@ -94,6 +94,7 @@ export default function Home() {
 
   // Inputs
   const [urlInput, setUrlInput] = useState('');
+  const [manualTranscript, setManualTranscript] = useState(''); // New State
 
   // Data
   const [videoData, setVideoData] = useState<VideoResponse | null>(null);
@@ -113,10 +114,13 @@ export default function Home() {
     setVideoData(null);
     setClipData(null);
     try {
-      const data = await processUrl(urlInput);
+      // Pass manualTranscript if present
+      const data = await processUrl(urlInput, manualTranscript);
       setVideoData(data);
+      setManualTranscript(''); // Clear after success
     } catch (err: any) {
-      setError(err.message || "Failed to process video");
+      setError(err.message || "Failed to process video. " + (err.suggestion || ""));
+      // Maintain error state to show manual input if needed
     } finally {
       setLoading(false);
     }
@@ -273,7 +277,38 @@ export default function Home() {
                   </div>
                 )}
               </div>
-              {loading && (
+
+              {/* Manual Transcript Fallback UI */}
+              {error && error.includes("Please provide the transcript manually") && (
+                <div className="mt-6 bg-yellow-900/20 border border-yellow-700/50 p-6 rounded-xl animate-in zoom-in-95 duration-300">
+                  <h3 className="text-yellow-400 font-bold mb-2 flex items-center gap-2">
+                    ⚠️ Manual Action Required
+                  </h3>
+                  <p className="text-gray-300 text-sm mb-4">
+                    Automated transcript fetch failed. Please paste the transcript manually:
+                  </p>
+                  <ol className="list-decimal list-inside text-xs text-gray-400 mb-4 space-y-1 ml-2">
+                    <li>Open video on YouTube</li>
+                    <li>Click "Show transcript" in description</li>
+                    <li>Copy all text and paste below</li>
+                  </ol>
+                  <textarea
+                    className="w-full bg-gray-950/80 border border-gray-700 rounded-lg p-3 text-sm text-gray-300 focus:ring-2 focus:ring-yellow-500 outline-none min-h-[120px]"
+                    placeholder="Paste transcript text here..."
+                    value={manualTranscript}
+                    onChange={(e) => setManualTranscript(e.target.value)}
+                  />
+                  <button
+                    onClick={handleProcess}
+                    disabled={loading || !manualTranscript}
+                    className="mt-3 bg-yellow-600 hover:bg-yellow-500 text-white px-6 py-2 rounded-lg text-sm font-bold transition-all"
+                  >
+                    {loading ? 'Processing...' : 'Retry with Manual Transcript'}
+                  </button>
+                </div>
+              )}
+
+              {loading && !error && (
                 <div className="mt-4 w-full bg-gray-800 rounded-xl p-4 border border-gray-700 animate-pulse">
                   {uploadProgress < 100 ? (
                     <>

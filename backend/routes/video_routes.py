@@ -1,6 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Body, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional
 import os
 import json
 import uuid
@@ -8,8 +9,9 @@ import uuid
 # Internal modules
 from services.video_service import extract_audio, extract_clip, get_youtube_stream_urls, extract_clip_from_stream
 from services.transcription_service import transcribe_audio
-from services.youtube_transcript_service import get_youtube_captions_from_url, extract_video_id
+from services.youtube_transcript_service import extract_video_id
 from services.gemini_service import generate_summary
+from services.ultimate_youtube_service import UltimateYouTubeService
 from utils.validators import validate_video_file, validate_youtube_url
 from utils.storage import save_upload_file, get_file_path, UPLOADS_DIR, PROCESSED_DIR
 from utils.metadata import save_metadata, get_all_videos
@@ -28,6 +30,7 @@ def get_history_endpoint():
 # --- Models ---
 class VideoRequest(BaseModel):
     url: str
+    transcript: Optional[str] = None  # Manual override
 
 class ClipRequest(BaseModel):
     video_filename: str
@@ -38,13 +41,11 @@ class ClipRequest(BaseModel):
 
 # --- Endpoints ---
 
-from services.robust_youtube_service import RobustYouTubeService
-
 @router.post("/process-url")
 async def process_url_endpoint(request: VideoRequest):
     """
     Process a YouTube URL using streaming architecture (NO DOWNLOAD).
-    Uses robust multi-strategy fetching to bypass rate limits.
+    Uses 4-layer robust fallback to bypass rate limits.
     """
     try:
         # 1. Validation
@@ -54,21 +55,21 @@ async def process_url_endpoint(request: VideoRequest):
         video_id = extract_video_id(request.url)
         filename = f"{video_id}.mp4"  # Virtual filename for metadata
         
-        # 3. Try Robust Transcript Fetching (Invidious -> API -> Audio Fallback)
+        # 3. Try Ultimate Transcript Fetching
         transcript_data = None
         method_used = "unknown"
         
-        try:
-            print(f"Attempting to fetch transcript for {video_id} using Robust Service...")
-            youtube_service = RobustYouTubeService()
-            result = youtube_service.get_transcript(video_id, video_url=request.url)
-            
-            # Result format: { "transcript": "...", "words": [...], "method": "..." }
-            
+        print(f"Attempting to fetch transcript for {video_id} using Ultimate Service...")
+        youtube_service = UltimateYouTubeService()
+        
+        # Pass manual transcript if provided
+        result = youtube_service.get_transcript(video_id, manual_transcript=request.transcript)
+        
+        if result["success"]:
             # Format to match expected structure for frontend
             transcript = [
                 {
-                    "text": w["text"], # Robust service standardizes this to 'text'
+                    "text": w["text"],
                     "start": w["start"],
                     "end": w["end"],
                     "confidence": 1.0
@@ -80,17 +81,31 @@ async def process_url_endpoint(request: VideoRequest):
             print(f"✅ Successfully fetched transcript using {method_used.upper()}")
             transcript_data = transcript
             
-        except Exception as transcript_error:
-            print(f"⚠️ Robust transcript fetch failed: {transcript_error}")
-            raise HTTPException(
+        else:
+            # 4. Handle Failure with Instructions
+            print(f"⚠️ Ultimate transcript fetch failed. Errors: {result.get('errors')}")
+            
+            # Return special 400 error that triggers manual input on frontend
+            return JSONResponse(
                 status_code=400,
-                detail=f"Could not fetch transcript. Error: {str(transcript_error)}"
+                content={
+                    "detail": "Could not fetch transcript automatically.",
+                    "suggestion": "Please provide the transcript manually from YouTube.",
+                    "error_type": "transcript_fetch_failed",
+                    "instructions": [
+                        "1. Open the video on YouTube",
+                        "2. Click 'Show transcript' below the video description",
+                        "3. Copy all the text",
+                        "4. Paste it into the 'Manual Transcript' box below and click Process again"
+                    ]
+                }
             )
         
-        # 4. Get stream URLs for later clip extraction (NO DOWNLOAD)
+        # 5. Get stream URLs for later clip extraction (NO DOWNLOAD)
+        # We handle this AFTER successful transcript
         stream_info = get_youtube_stream_urls(request.url)
         
-        # 5. Save metadata with stream URL (NO VIDEO FILE SAVED)
+        # 6. Save metadata
         from utils.metadata import save_transcript
         save_transcript(filename, transcript_data)
         
@@ -99,26 +114,28 @@ async def process_url_endpoint(request: VideoRequest):
             "source": request.url,
             "filename": filename,
             "video_id": video_id,
-            "stream_url": stream_info["video_url"],  # Save for clip extraction
+            "stream_url": stream_info["video_url"],
             "title": stream_info["title"],
             "duration": stream_info["duration"],
-            "video_url": f"/youtube/{video_id}",  # Virtual URL
+            "video_url": f"/youtube/{video_id}",
             "transcript_summary": transcript_data[0]["text"][:100] + "..." if transcript_data else "No transcript"
         })
 
         return {
             "video_filename": filename,
-            "video_url": f"/youtube/{video_id}",  # Virtual URL (no actual file)
+            "video_url": f"/youtube/{video_id}",
             "transcript": transcript_data,
             "title": stream_info.get("title", "Unknown"),
-            "duration": stream_info.get("duration", 0)
+            "duration": stream_info.get("duration", 0),
+            "method": method_used
         }
-    except HTTPException as he:
-        raise he
+
     except Exception as e:
         print(f"Error processing URL: {e}")
         import traceback
         traceback.print_exc()
+        # Ensure we don't double-wrap HTTPException
+        if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload")
