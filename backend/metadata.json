@@ -2,6 +2,22 @@
   {
     "type": "upload",
     "source": "file_upload",
+    "filename": "9912a7a2-f90b-4425-85f6-8cd5877658d4.mp4",
+    "video_url": "/static/uploads/9912a7a2-f90b-4425-85f6-8cd5877658d4.mp4",
+    "transcript_summary": "Are...",
+    "created_at": "2025-12-29T10:45:09.040038"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
+    "filename": "8e94a291-1221-4fa2-a9de-204cda6d1dbd.mp4",
+    "video_url": "/static/uploads/8e94a291-1221-4fa2-a9de-204cda6d1dbd.mp4",
+    "transcript_summary": "Transcription failed: ASSEMBLYAI_API_KEY environment variable is missing...",
+    "created_at": "2025-12-29T10:42:29.846954"
+  },
+  {
+    "type": "upload",
+    "source": "file_upload",
     "filename": "7b47385e-726a-44e4-b95b-fcb4ed1c8c43.mp4",
     "video_url": "/static/uploads/7b47385e-726a-44e4-b95b-fcb4ed1c8c43.mp4",
     "transcript_summary": " Are...",

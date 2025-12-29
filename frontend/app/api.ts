@@ -30,10 +30,7 @@ export interface HistoryItem {
   created_at: string;
 }
 
-export const processUrl = async (url: string, transcript?: string): Promise<VideoResponse> => {
-  const res = await axios.post(`${API_BASE}/process-url`, { url, transcript });
-  return res.data;
-};
+
 
 export const uploadVideo = async (
   file: File,

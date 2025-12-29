@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { processUrl, uploadVideo, extractClip, VideoResponse, ClipResponse, TranscriptSegment, getHistory, deleteVideo, getTranscript, HistoryItem } from './api';
+import { uploadVideo, extractClip, VideoResponse, ClipResponse, TranscriptSegment, getHistory, deleteVideo, getTranscript, HistoryItem } from './api';
 import Link from 'next/link';
 import { Upload, Link as LinkIcon, Search, Play, Scissors, Layers, LayoutGrid, Trash2, ExternalLink } from 'lucide-react';
 
@@ -65,8 +65,8 @@ function LibraryView({ onSelect, onDelete }: { onSelect: (item: HistoryItem) => 
               </button>
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
-              <span className={`px-2 py-0.5 rounded ${item.type === 'youtube' ? 'bg-red-900/30 text-red-400' : 'bg-blue-900/30 text-blue-400'}`}>
-                {item.type.toUpperCase()}
+              <span className={`px-2 py-0.5 rounded bg-blue-900/30 text-blue-400`}>
+                UPLOAD
               </span>
               <span>{new Date(item.created_at).toLocaleDateString()}</span>
             </div>
@@ -87,14 +87,8 @@ function LibraryView({ onSelect, onDelete }: { onSelect: (item: HistoryItem) => 
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'url' | 'upload'>('url');
-
   // View State: 'studio' or 'library'
   const [activeView, setActiveView] = useState<'studio' | 'library'>('studio');
-
-  // Inputs
-  const [urlInput, setUrlInput] = useState('');
-  const [manualTranscript, setManualTranscript] = useState(''); // New State
 
   // Data
   const [videoData, setVideoData] = useState<VideoResponse | null>(null);
@@ -107,24 +101,6 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // --- Actions ---
-
-  const handleProcess = async () => {
-    setLoading(true);
-    setError(null);
-    setVideoData(null);
-    setClipData(null);
-    try {
-      // Pass manualTranscript if present
-      const data = await processUrl(urlInput, manualTranscript);
-      setVideoData(data);
-      setManualTranscript(''); // Clear after success
-    } catch (err: any) {
-      setError(err.message || "Failed to process video. " + (err.suggestion || ""));
-      // Maintain error state to show manual input if needed
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadFromLibrary = async (item: HistoryItem) => {
     setLoading(true);
@@ -232,81 +208,18 @@ export default function Home() {
           {/* Input Section */}
           <div className="max-w-3xl mx-auto mb-16">
             <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl p-6 shadow-2xl">
-              <div className="flex gap-4 mb-6 border-b border-gray-800 pb-4">
-                <button
-                  onClick={() => setActiveTab('url')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${activeTab === 'url' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
-                >
-                  <LinkIcon size={18} /> YouTube URL
-                </button>
-                <button
-                  onClick={() => setActiveTab('upload')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${activeTab === 'upload' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
-                >
-                  <Upload size={18} /> Upload Video
-                </button>
-              </div>
 
               <div className="flex gap-4">
-                {activeTab === 'url' ? (
-                  <>
-                    <input
-                      type="text"
-                      placeholder="Paste YouTube URL here..."
-                      className="flex-1 bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all text-gray-200"
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                    />
-                    <button
-                      onClick={handleProcess}
-                      disabled={loading}
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-8 py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-purple-500/25"
-                    >
-                      {loading ? 'Processing...' : 'Analyze Video'}
-                    </button>
-                  </>
-                ) : (
-                  <div className="w-full">
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-xl cursor-pointer bg-gray-800/50 hover:bg-gray-800 transition-all">
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <Upload className="w-10 h-10 mb-3 text-gray-400" />
-                        <p className="mb-2 text-sm text-gray-400"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                      </div>
-                      <input type="file" className="hidden" accept="video/*" onChange={handleUpload} />
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              {/* Manual Transcript Fallback UI */}
-              {error && error.includes("Please provide the transcript manually") && (
-                <div className="mt-6 bg-yellow-900/20 border border-yellow-700/50 p-6 rounded-xl animate-in zoom-in-95 duration-300">
-                  <h3 className="text-yellow-400 font-bold mb-2 flex items-center gap-2">
-                    ⚠️ Manual Action Required
-                  </h3>
-                  <p className="text-gray-300 text-sm mb-4">
-                    Automated transcript fetch failed. Please paste the transcript manually:
-                  </p>
-                  <ol className="list-decimal list-inside text-xs text-gray-400 mb-4 space-y-1 ml-2">
-                    <li>Open video on YouTube</li>
-                    <li>Click "Show transcript" in description</li>
-                    <li>Copy all text and paste below</li>
-                  </ol>
-                  <textarea
-                    className="w-full bg-gray-950/80 border border-gray-700 rounded-lg p-3 text-sm text-gray-300 focus:ring-2 focus:ring-yellow-500 outline-none min-h-[120px]"
-                    placeholder="Paste transcript text here..."
-                    value={manualTranscript}
-                    onChange={(e) => setManualTranscript(e.target.value)}
-                  />
-                  <button
-                    onClick={handleProcess}
-                    disabled={loading || !manualTranscript}
-                    className="mt-3 bg-yellow-600 hover:bg-yellow-500 text-white px-6 py-2 rounded-lg text-sm font-bold transition-all"
-                  >
-                    {loading ? 'Processing...' : 'Retry with Manual Transcript'}
-                  </button>
+                <div className="w-full">
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-xl cursor-pointer bg-gray-800/50 hover:bg-gray-800 transition-all">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <Upload className="w-10 h-10 mb-3 text-gray-400" />
+                      <p className="mb-2 text-sm text-gray-400"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                    </div>
+                    <input type="file" className="hidden" accept="video/*" onChange={handleUpload} />
+                  </label>
                 </div>
-              )}
+              </div>
 
               {loading && !error && (
                 <div className="mt-4 w-full bg-gray-800 rounded-xl p-4 border border-gray-700 animate-pulse">

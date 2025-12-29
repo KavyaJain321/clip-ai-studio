@@ -7,12 +7,10 @@ import json
 import uuid
 
 # Internal modules
-from services.video_service import extract_audio, extract_clip, get_youtube_stream_urls, extract_clip_from_stream
+from services.video_service import extract_audio, extract_clip
 from services.transcription_service import transcribe_audio
-from services.youtube_transcript_service import extract_video_id
 from services.gemini_service import generate_summary
-from services.ultimate_youtube_service import UltimateYouTubeService
-from utils.validators import validate_video_file, validate_youtube_url
+from utils.validators import validate_video_file
 from utils.storage import save_upload_file, get_file_path, UPLOADS_DIR, PROCESSED_DIR
 from utils.metadata import save_metadata, get_all_videos
 
@@ -28,9 +26,7 @@ def get_history_endpoint():
     return get_all_videos()
 
 # --- Models ---
-class VideoRequest(BaseModel):
-    url: str
-    transcript: Optional[str] = None  # Manual override
+
 
 class ClipRequest(BaseModel):
     video_filename: str
@@ -41,102 +37,7 @@ class ClipRequest(BaseModel):
 
 # --- Endpoints ---
 
-@router.post("/process-url")
-async def process_url_endpoint(request: VideoRequest):
-    """
-    Process a YouTube URL using streaming architecture (NO DOWNLOAD).
-    Uses 4-layer robust fallback to bypass rate limits.
-    """
-    try:
-        # 1. Validation
-        validate_youtube_url(request.url)
-        
-        # 2. Extract video ID
-        video_id = extract_video_id(request.url)
-        filename = f"{video_id}.mp4"  # Virtual filename for metadata
-        
-        # 3. Try Ultimate Transcript Fetching
-        transcript_data = None
-        method_used = "unknown"
-        
-        print(f"Attempting to fetch transcript for {video_id} using Ultimate Service...")
-        youtube_service = UltimateYouTubeService()
-        
-        # Pass manual transcript if provided
-        result = youtube_service.get_transcript(video_id, manual_transcript=request.transcript)
-        
-        if result["success"]:
-            # Format to match expected structure for frontend
-            transcript = [
-                {
-                    "text": w["text"],
-                    "start": w["start"],
-                    "end": w["end"],
-                    "confidence": 1.0
-                }
-                for w in result["words"]
-            ]
-            
-            method_used = result.get("method", "unknown")
-            print(f"✅ Successfully fetched transcript using {method_used.upper()}")
-            transcript_data = transcript
-            
-        else:
-            # 4. Handle Failure with Instructions
-            print(f"⚠️ Ultimate transcript fetch failed. Errors: {result.get('errors')}")
-            
-            # Return special 400 error that triggers manual input on frontend
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "detail": "Could not fetch transcript automatically.",
-                    "suggestion": "Please provide the transcript manually from YouTube.",
-                    "error_type": "transcript_fetch_failed",
-                    "instructions": [
-                        "1. Open the video on YouTube",
-                        "2. Click 'Show transcript' below the video description",
-                        "3. Copy all the text",
-                        "4. Paste it into the 'Manual Transcript' box below and click Process again"
-                    ]
-                }
-            )
-        
-        # 5. Get stream URLs for later clip extraction (NO DOWNLOAD)
-        # We handle this AFTER successful transcript
-        stream_info = get_youtube_stream_urls(request.url)
-        
-        # 6. Save metadata
-        from utils.metadata import save_transcript
-        save_transcript(filename, transcript_data)
-        
-        save_metadata({
-            "type": "youtube",
-            "source": request.url,
-            "filename": filename,
-            "video_id": video_id,
-            "stream_url": stream_info["video_url"],
-            "title": stream_info["title"],
-            "duration": stream_info["duration"],
-            "video_url": f"/youtube/{video_id}",
-            "transcript_summary": transcript_data[0]["text"][:100] + "..." if transcript_data else "No transcript"
-        })
 
-        return {
-            "video_filename": filename,
-            "video_url": f"/youtube/{video_id}",
-            "transcript": transcript_data,
-            "title": stream_info.get("title", "Unknown"),
-            "duration": stream_info.get("duration", 0),
-            "method": method_used
-        }
-
-    except Exception as e:
-        print(f"Error processing URL: {e}")
-        import traceback
-        traceback.print_exc()
-        # Ensure we don't double-wrap HTTPException
-        if isinstance(e, HTTPException): raise e
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload")
 def upload_video_endpoint(file: UploadFile = File(...)):
@@ -203,38 +104,18 @@ def extract_clip_endpoint(request: ClipRequest):
     """
     print(f"Received clip request: {request.dict()}")
     try:
-        # 1. Check if this is a YouTube video (has stream_url in metadata)
-        from utils.metadata import get_video_metadata
-        metadata = get_video_metadata(request.video_filename)
+        # 2. Extract Clip (local file only)
+        safe_filename = os.path.basename(request.video_filename)
+        video_path = os.path.join(UPLOADS_DIR, safe_filename)
         
-        clip_filename = f"clip_{uuid.uuid4()}.mp4"
-        clip_path = os.path.join(PROCESSED_DIR, clip_filename)
+        print(f"Looking for file at: {video_path}")
+        if not os.path.exists(video_path):
+                print("File not found.")
+                raise HTTPException(status_code=404, detail=f"Video file not found: {safe_filename}")
         
-        # 2. Extract Clip (either from stream or local file)
-        if metadata and metadata.get("stream_url"):
-            # YouTube video - extract from stream
-            print(f"Extracting clip from YouTube stream...")
-            stream_url = metadata["stream_url"]
-            extraction_result = extract_clip_from_stream(
-                stream_url,
-                request.timestamp,
-                clip_path,
-                duration=14.0
-            )
-            print("Stream extraction complete.")
-        else:
-            # Uploaded video - extract from local file
-            safe_filename = os.path.basename(request.video_filename)
-            video_path = os.path.join(UPLOADS_DIR, safe_filename)
-            
-            print(f"Looking for file at: {video_path}")
-            if not os.path.exists(video_path):
-                 print("File not found.")
-                 raise HTTPException(status_code=404, detail=f"Video file not found: {safe_filename}")
-            
-            print(f"Extracting clip from local file...")
-            extraction_result = extract_clip(video_path, request.timestamp, clip_path)
-            print("Extraction complete.")
+        print(f"Extracting clip from local file...")
+        extraction_result = extract_clip(video_path, request.timestamp, clip_path)
+        print("Extraction complete.")
         
         # 3. Generate Summary
         summary_data = {}
