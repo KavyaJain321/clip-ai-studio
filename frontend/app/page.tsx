@@ -3,7 +3,33 @@
 import { useState, useRef, useEffect } from 'react';
 import { uploadVideo, extractClip, VideoResponse, ClipResponse, TranscriptSegment } from './api';
 import Link from 'next/link';
-import { Upload, Search, Play, Scissors, Layers } from 'lucide-react';
+import { Upload, Search, Play, Scissors, Layers, Clock, CheckCircle } from 'lucide-react';
+
+// --- Advanced Search Logic ---
+const performAdvancedSearch = (transcript: TranscriptSegment[], query: string): TranscriptSegment[] => {
+  if (!query) return [];
+  const q = query.trim();
+
+  return transcript.filter(seg => {
+    const text = seg.text.toLowerCase();
+
+    // 1. Boolean AND (e.g., "cyber AND security")
+    if (q.includes(' AND ')) {
+      const parts = q.split(' AND ').map(p => p.trim().toLowerCase());
+      return parts.every(part => text.includes(part));
+    }
+
+    // 2. Boolean OR (e.g., "cyber OR security")
+    if (q.includes(' OR ')) {
+      const parts = q.split(' OR ').map(p => p.trim().toLowerCase());
+      return parts.some(part => text.includes(part));
+    }
+
+    // 3. Exact Phrase (e.g., "cyber security" or just cyber security)
+    // We treat the whole remaining string as a phrase to match
+    return text.includes(q.toLowerCase());
+  });
+};
 
 
 
@@ -20,7 +46,23 @@ export default function Home() {
 
   // Clip state
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchResults, setSearchResults] = useState<TranscriptSegment[]>([]);
   const [selectedTimestamp, setSelectedTimestamp] = useState<number | null>(null);
+
+  // Search Effect
+  useEffect(() => {
+    if (videoData?.transcript) {
+      const results = performAdvancedSearch(videoData.transcript, searchKeyword);
+      setSearchResults(results);
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchKeyword, videoData]);
+
+  const handleSearchResultClick = (timestamp: number) => {
+    handleSeek(timestamp);
+    // Auto-select for clip generation logic is already handled by handleSeek setting selectedTimestamp
+  };
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -167,11 +209,44 @@ export default function Home() {
                             type="text"
                             value={searchKeyword}
                             onChange={(e) => setSearchKeyword(e.target.value)}
-                            placeholder="e.g. 'artificial intelligence'"
+                            placeholder="e.g. 'Cyber AND Security', 'AI OR ML', 'Exact Phrase'"
                             className="w-full bg-gray-950/50 border border-gray-700 rounded-lg px-4 py-3 pl-10 focus:ring-2 focus:ring-pink-500 outline-none"
                           />
                           <Search className="absolute left-3 top-3.5 text-gray-500" size={18} />
                         </div>
+
+                        {/* Search Results Area */}
+                        {searchKeyword && (
+                          <div className="mt-2 max-h-60 overflow-y-auto bg-gray-950/30 border border-gray-800 rounded-lg scrollbar-thin scrollbar-thumb-gray-700">
+                            <div className="p-2 border-b border-gray-800/50 flex justify-between items-center sticky top-0 bg-gray-900/90 backdrop-blur">
+                              <span className="text-xs font-bold text-gray-400">SEARCH RESULTS ({searchResults.length})</span>
+                            </div>
+                            {searchResults.length === 0 ? (
+                              <div className="p-4 text-center text-sm text-gray-500">No matches found</div>
+                            ) : (
+                              <div className="space-y-1 p-1">
+                                {searchResults.map((result, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => handleSearchResultClick(result.start)}
+                                    className="w-full text-left p-2 rounded hover:bg-purple-900/20 hover:border-purple-500/30 border border-transparent transition-all group"
+                                  >
+                                    <div className="flex justify-between items-center mb-1">
+                                      <div className="flex items-center gap-2 text-purple-400 font-mono text-xs">
+                                        <Clock size={12} />
+                                        <span>{result.start.toFixed(1)}s</span>
+                                      </div>
+                                      {selectedTimestamp === result.start && <CheckCircle size={12} className="text-green-500" />}
+                                    </div>
+                                    <p className="text-xs text-gray-300 line-clamp-2 pl-5 border-l-2 border-gray-700 group-hover:border-purple-500">
+                                      {result.text}
+                                    </p>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
