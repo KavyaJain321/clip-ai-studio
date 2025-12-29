@@ -21,14 +21,7 @@ export interface ClipResponse {
   summary: string;
 }
 
-export interface HistoryItem {
-  type: string;
-  source: string;
-  filename: string;
-  video_url: string;
-  transcript_summary: string;
-  created_at: string;
-}
+
 
 
 
@@ -60,21 +53,4 @@ export const extractClip = async (video_filename: string, keyword: string, times
   return res.data;
 };
 
-export const getHistory = async (): Promise<HistoryItem[]> => {
-  const res = await axios.get(`${API_BASE}/history`);
-  return res.data;
-};
 
-export const deleteVideo = async (filename: string): Promise<void> => {
-  await axios.delete(`${API_BASE}/video/${filename}`);
-};
-
-export const getTranscript = async (filename: string): Promise<TranscriptSegment[]> => {
-  try {
-    const res = await axios.get(`${API_BASE}/transcript/${filename}`);
-    return res.data.transcript || [];
-  } catch (error) {
-    console.error("Error fetching transcript:", error);
-    return [];
-  }
-};

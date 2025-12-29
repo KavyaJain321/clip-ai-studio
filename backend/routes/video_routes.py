@@ -12,7 +12,7 @@ from services.transcription_service import transcribe_audio
 from services.gemini_service import generate_summary
 from utils.validators import validate_video_file
 from utils.storage import save_upload_file, get_file_path, UPLOADS_DIR, PROCESSED_DIR
-from utils.metadata import save_metadata, get_all_videos
+from utils.storage import save_upload_file, get_file_path, UPLOADS_DIR, PROCESSED_DIR
 
 # Ensure directories exist
 os.makedirs(UPLOADS_DIR, exist_ok=True)
@@ -20,10 +20,7 @@ os.makedirs(PROCESSED_DIR, exist_ok=True)
 
 router = APIRouter(prefix="/api", tags=["Video Processing"])
 
-@router.get("/history")
-def get_history_endpoint():
-    """Returns list of previously processed videos."""
-    return get_all_videos()
+
 
 # --- Models ---
 
@@ -73,16 +70,9 @@ def upload_video_endpoint(file: UploadFile = File(...)):
             transcript = [{"text": f"Transcription failed: {str(e)}", "start": 0, "end": 0}]
         
         # Save to History
-        from utils.metadata import save_transcript
-        save_transcript(filename, transcript)
+
         
-        save_metadata({
-            "type": "upload",
-            "source": "file_upload",
-            "filename": filename,
-            "video_url": f"/static/uploads/{filename}",
-            "transcript_summary": transcript[0]["text"][:100] + "..." if transcript else "No transcript"
-        })
+
 
         return {
             "video_filename": filename,
@@ -180,50 +170,4 @@ def generate_summary_endpoint(
     return generate_summary(clip_transcript, keyword, context_before, context_after)
     return generate_summary(clip_transcript, keyword, context_before, context_after)
 
-# --- Library Management ---
 
-@router.delete("/video/{filename}")
-def delete_video_endpoint(filename: str):
-    """
-    Deletes a video, its transcript, and associated files.
-    """
-    from utils.metadata import delete_video_entry
-    
-    try:
-        # 1. Check existence in metadata (optional but safe)
-        videos = get_all_videos()
-        if not any(v['filename'] == filename for v in videos):
-            pass # Proceed to cleanup files anyway
-        
-        # 2. Delete actual files
-        video_path = os.path.join(UPLOADS_DIR, filename)
-        if os.path.exists(video_path):
-            os.remove(video_path)
-            
-        audio_name = f"{os.path.splitext(filename)[0]}.wav"
-        audio_path = os.path.join(UPLOADS_DIR, audio_name)
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
-            
-        # 3. Remove metadata and transcript
-        delete_video_entry(filename)
-        
-        return {"status": "success", "message": f"Deleted {filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/transcript/{filename}")
-def get_transcript_endpoint(filename: str):
-    """
-    Retrieves the full transcript for a specific video.
-    """
-    from utils.metadata import get_transcript
-    
-    transcript = get_transcript(filename)
-    if not transcript:
-        # Try to find recent one in memory? No.
-        # If no transcript file, maybe it wasn't saved with new system. 
-        # Return empty or error?
-        return {"transcript": []}
-    
-    return {"transcript": transcript}

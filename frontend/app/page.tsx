@@ -1,94 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { uploadVideo, extractClip, VideoResponse, ClipResponse, TranscriptSegment, getHistory, deleteVideo, getTranscript, HistoryItem } from './api';
+import { uploadVideo, extractClip, VideoResponse, ClipResponse, TranscriptSegment } from './api';
 import Link from 'next/link';
-import { Upload, Link as LinkIcon, Search, Play, Scissors, Layers, LayoutGrid, Trash2, ExternalLink } from 'lucide-react';
+import { Upload, Search, Play, Scissors, Layers } from 'lucide-react';
 
-// --- Library Component (Internal) ---
-function LibraryView({ onSelect, onDelete }: { onSelect: (item: HistoryItem) => void, onDelete: () => void }) {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const refresh = () => {
-    setLoading(true);
-    getHistory()
-      .then(setHistory)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  const handleDelete = async (filename: string) => {
-    if (!confirm("Are you sure you want to delete this video?")) return;
-    try {
-      await deleteVideo(filename);
-      refresh();
-      onDelete(); // Notify parent
-    } catch (e) {
-      alert("Failed to delete video");
-    }
-  }
-
-  const API_HOST = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-  if (loading) return <div className="text-center text-gray-500 py-20">Loading library...</div>;
-
-  if (history.length === 0) return (
-    <div className="text-center text-gray-500 py-20 bg-gray-900/50 rounded-2xl border border-gray-800">
-      <p>No videos in library.</p>
-    </div>
-  );
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in zoom-in-95 duration-300">
-      {history.map((item, idx) => (
-        <div key={idx} className="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden hover:border-purple-500/50 transition-all group relative">
-          {/* Visuals */}
-          <div className="aspect-video bg-black relative">
-            <video src={`${API_HOST}${item.video_url}#t=1.0`} className="w-full h-full object-cover opacity-60" preload="metadata" />
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-              <button onClick={() => onSelect(item)} className="bg-purple-600 hover:bg-purple-500 text-white rounded-full p-4 transform hover:scale-110 transition-all shadow-xl">
-                <Play size={24} fill="currentColor" />
-              </button>
-            </div>
-          </div>
-          {/* Content */}
-          <div className="p-4">
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="font-bold text-gray-200 truncate flex-1" title={item.filename}>{item.filename}</h3>
-              <button onClick={() => handleDelete(item.filename)} className="text-gray-600 hover:text-red-400 p-1">
-                <Trash2 size={16} />
-              </button>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
-              <span className={`px-2 py-0.5 rounded bg-blue-900/30 text-blue-400`}>
-                UPLOAD
-              </span>
-              <span>{new Date(item.created_at).toLocaleDateString()}</span>
-            </div>
-            <button
-              onClick={() => onSelect(item)}
-              className="w-full mt-2 bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg text-gray-300 flex items-center justify-center gap-2"
-            >
-              <ExternalLink size={14} /> Open in Studio
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // View State: 'studio' or 'library'
-  const [activeView, setActiveView] = useState<'studio' | 'library'>('studio');
+  const [activeView, setActiveView] = useState('studio');
 
   // Data
   const [videoData, setVideoData] = useState<VideoResponse | null>(null);
@@ -102,34 +26,7 @@ export default function Home() {
 
   // --- Actions ---
 
-  const loadFromLibrary = async (item: HistoryItem) => {
-    setLoading(true);
-    setActiveView('studio'); // Switch back
-    // Keep existing data briefly or clear it? Better clear to show loading state if needed.
-    // But we want to preserve upload state if we were uploading?
-    // Wait, if I click "Open" I am *replacing* the current studio content.
-    // That's fine.
 
-    setVideoData(null);
-    setClipData(null);
-    setError(null);
-
-    try {
-      // Fetch full transcript
-      const transcript = await getTranscript(item.filename);
-
-      setVideoData({
-        video_filename: item.filename,
-        video_url: item.video_url,
-        transcript: transcript
-      });
-
-    } catch (err: any) {
-      setError("Failed to load video details.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Progress State
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -188,14 +85,9 @@ export default function Home() {
 
       <div className="relative z-10 max-w-7xl mx-auto p-6">
         <header className="mb-12 text-center relative">
-          <button
-            onClick={() => setActiveView(activeView === 'studio' ? 'library' : 'studio')}
-            className="absolute right-0 top-0 px-4 py-2 bg-gray-900/50 border border-gray-800 rounded-lg hover:bg-gray-800 transition-all text-sm text-gray-300 flex items-center gap-2"
-          >
-            {activeView === 'studio' ? <><LayoutGrid size={16} /> My Library</> : <><Play size={16} /> Back to Studio</>}
-          </button>
+
           <h1 className="text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600 mb-4">
-            {activeView === 'library' ? 'Your Library' : 'ClipAI Studio'}
+            ClipAI Studio
           </h1>
           <p className="text-gray-400 text-lg">Transcribe, Search, and Extract viral clips in seconds.</p>
         </header>
@@ -364,13 +256,7 @@ export default function Home() {
 
         {/* LIBRARY VIEW */}
         <div style={{ display: activeView === 'library' ? 'block' : 'none' }}>
-          <LibraryView
-            onSelect={loadFromLibrary}
-            onDelete={() => {
-              // Optional: clear current data if deleted
-              setVideoData(null);
-            }}
-          />
+
         </div>
 
       </div>
