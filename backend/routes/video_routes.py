@@ -103,6 +103,9 @@ def extract_clip_endpoint(request: ClipRequest):
                 print("File not found.")
                 raise HTTPException(status_code=404, detail=f"Video file not found: {safe_filename}")
         
+        clip_filename = f"clip_{uuid.uuid4()}.mp4"
+        clip_path = os.path.join(PROCESSED_DIR, clip_filename)
+        
         print(f"Extracting clip from local file...")
         extraction_result = extract_clip(video_path, request.timestamp, clip_path)
         print("Extraction complete.")
